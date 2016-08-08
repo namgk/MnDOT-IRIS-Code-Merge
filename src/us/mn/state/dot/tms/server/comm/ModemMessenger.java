@@ -1,6 +1,7 @@
 /*
  * IRIS -- Intelligent Roadway Information System
  * Copyright (C) 2008-2015  Minnesota Department of Transportation
+ * Copyright (C) 2015  SRF Consulting Group
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -228,5 +229,18 @@ public class ModemMessenger extends Messenger {
 			mis.setConnected();
 		}
 		log("connected");
+	}
+
+	@Override
+	public void drain() throws IOException {
+		if (input.available() == 0)
+			return;
+		InputStreamReader isr = new InputStreamReader(input,"US-ASCII");
+		String str;
+		while (input.available() > 0) {
+			str = readResponse(isr);
+			if (str.contains("NO CARRIER"))
+				throw new HangUpException();
+		}
 	}
 }
