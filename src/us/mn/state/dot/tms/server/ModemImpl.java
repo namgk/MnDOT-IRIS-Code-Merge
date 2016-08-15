@@ -1,6 +1,6 @@
 /*
  * IRIS -- Intelligent Roadway Information System
- * Copyright (C) 2011-2012  Minnesota Department of Transportation
+ * Copyright (C) 2011-2016  Minnesota Department of Transportation
  * Copyright (C) 2015  SRF Consulting Group
  *
  * This program is free software; you can redistribute it and/or modify
@@ -16,6 +16,7 @@
 package us.mn.state.dot.tms.server;
 
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
@@ -34,38 +35,56 @@ public class ModemImpl extends BaseObjectImpl implements Modem {
 	/** Load all the modems */
 	static protected void loadAll() throws TMSException {
 		namespace.registerType(SONAR_TYPE, ModemImpl.class);
-		store.query("SELECT name, uri, config, timeout FROM iris." +
-			SONAR_TYPE  + ";", new ResultFactory()
+		store.query("SELECT name, uri, config, timeout, enabled " +
+			"FROM iris." + SONAR_TYPE  + ";", new ResultFactory()
 		{
 			public void create(ResultSet row) throws Exception {
-				namespace.addObject(new ModemImpl(
-					row.getString(1),	// name
-					row.getString(2),	// uri
-					row.getString(3),	// config
-					row.getInt(4)		// timeout
-				));
+				namespace.addObject(new ModemImpl(row));
 			}
 		});
 	}
 
 	/** Get a mapping of the columns */
+	@Override
 	public Map<String, Object> getColumns() {
 		HashMap<String, Object> map = new HashMap<String, Object>();
 		map.put("name", name);
 		map.put("uri", uri);
 		map.put("config", config);
 		map.put("timeout", timeout);
+		map.put("enabled", enabled);
 		return map;
 	}
 
 	/** Get the database table name */
+	@Override
 	public String getTable() {
 		return "iris." + SONAR_TYPE;
 	}
 
 	/** Get the SONAR type name */
+	@Override
 	public String getTypeName() {
 		return SONAR_TYPE;
+	}
+
+	/** Create a new modem */
+	private ModemImpl(ResultSet row) throws SQLException {
+		this(row.getString(1),		// name
+		     row.getString(2),		// uri
+		     row.getString(3),		// config
+		     row.getInt(4),		// timeout
+		     row.getBoolean(5)		// enabled
+		);
+	}
+
+	/** Create a new modem */
+	private ModemImpl(String n, String u, String c, int t, boolean e) {
+		super(n);
+		uri = u;
+		config = c;
+		timeout = t;
+		enabled = e;
 	}
 
 	/** Create a new modem */
@@ -73,31 +92,25 @@ public class ModemImpl extends BaseObjectImpl implements Modem {
 		super(n);
 	}
 
-	/** Create a new modem */
-	public ModemImpl(String n, String u, String c, int t) {
-		super(n);
-		uri = u;
-		config = c;
-		timeout = t;
-	}
-
 	/** Remote URI for modem */
-	protected String uri = "";
+	private String uri = "";
 
 	/** Set remote URI for modem */
+	@Override
 	public void setUri(String u) {
 		uri = u;
 	}
 
 	/** Set remote URI for modem */
 	public void doSetUri(String u) throws TMSException {
-		if(u.equals(uri))
-			return;
-		store.update(this, "uri", u);
-		setUri(u);
+		if (!u.equals(uri)) {
+			store.update(this, "uri", u);
+			setUri(u);
+		}
 	}
 
 	/** Get remote URI for modem */
+	@Override
 	public String getUri() {
 		return uri;
 	}
@@ -107,7 +120,7 @@ public class ModemImpl extends BaseObjectImpl implements Modem {
 		try {
 			return new URI(uri);
 		}
-		catch(URISyntaxException e) {
+		catch (URISyntaxException e) {
 			// If the URI begins with a host IP address,
 			// we need to prepend a couple of slashes
 			return new URI("//" + uri);
@@ -116,48 +129,73 @@ public class ModemImpl extends BaseObjectImpl implements Modem {
 
 	/** Config string.  The default value sets the "Disconnect activity
 	 * timer" (S30) to 10 seconds.  This has been tested with a StarComm
-	 * modem -- who knows if it works for other brands.  The disconnect
-	 * after timeout feature is necessary for proper operation, since IRIS
-	 * will never tell the modem to hang up. */
-	protected String config = "ATS30=1";
+	 * modem -- who knows if it works for other brands. */
+	private String config = "ATS30=1";
 
 	/** Set config string */
+	@Override
 	public void setConfig(String c) {
 		config = c;
 	}
 
 	/** Set config string */
 	public void doSetConfig(String c) throws TMSException {
-		if(c.equals(config))
-			return;
-		store.update(this, "config", c);
-		setConfig(c);
+		if (!c.equals(config)) {
+			store.update(this, "config", c);
+			setConfig(c);
+		}
 	}
 
 	/** Get config string */
+	@Override
 	public String getConfig() {
 		return config;
 	}
 
 	/** Connect timeout (milliseconds) */
-	protected int timeout = 30000;
+	private int timeout = 30000;
 
 	/** Set the connect timeout (milliseconds) */
+	@Override
 	public void setTimeout(int t) {
 		timeout = t;
 	}
 
 	/** Set the connect timeout (milliseconds) */
 	public void doSetTimeout(int t) throws TMSException {
-		if(t == timeout)
-			return;
-		store.update(this, "timeout", t);
-		setTimeout(t);
+		if (t != timeout) {
+			store.update(this, "timeout", t);
+			setTimeout(t);
+		}
 	}
 
 	/** Get the connect timeout (milliseconds) */
+	@Override
 	public int getTimeout() {
 		return timeout;
+	}
+
+	/** Modem enabled boolean */
+	private boolean enabled = true;
+
+	/** Set the modem enabled boolean */
+	@Override
+	public void setEnabled(boolean e) {
+		enabled = e;
+	}
+
+	/** Set the modem enabled boolean */
+	public void doSetEnabled(boolean e) throws TMSException {
+		if (e != enabled) {
+			store.update(this, "enabled", e);
+			setEnabled(e);
+		}
+	}
+
+	/** Get the modem enabled boolean */
+	@Override
+	public boolean getEnabled() {
+		return enabled;
 	}
 
 	/** Current modem state */
@@ -165,13 +203,14 @@ public class ModemImpl extends BaseObjectImpl implements Modem {
 
 	/** Set the modem state */
 	public void setStateNotify(ModemState ms) {
-		if(ms != state) {
+		if (ms != state) {
 			state = ms;
 			notifyAttribute("state");
 		}
 	}
 
 	/** Get the modem state (ordinal of ModemState) */
+	@Override
 	public int getState() {
 		return state.ordinal();
 	}
@@ -200,18 +239,8 @@ public class ModemImpl extends BaseObjectImpl implements Modem {
 	/** Release ownership of the modem */
 	public void release() {
 		// Name used for unique acquire/release lock
-		synchronized(name) {
+		synchronized (name) {
 			owned = false;
 		}
-	}
-
-	private transient boolean enabled = true;
-
-	public void setEnabled(boolean b) {
-		enabled = b;
-	}
-
-	public boolean getEnabled() {
-		return enabled;
 	}
 }
